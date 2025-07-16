@@ -14,12 +14,17 @@ class SerialCommunication {
         try {
             // Check if Web Serial API is supported
             if (!('serial' in navigator)) {
-                throw new Error('Web Serial API not supported in this browser. Please use Chrome 89+, Edge 89+, or Opera 75+');
+                throw new Error('Web Serial API not supported in this browser. Please use Chrome 89+, Edge 89+, or Opera 75+. Make sure you are using a Chromium-based browser.');
             }
 
             // Check if secure context (HTTPS or localhost)
             if (!window.isSecureContext) {
-                throw new Error('Web Serial API requires a secure context (HTTPS or localhost)');
+                throw new Error('Web Serial API requires a secure context (HTTPS or localhost). Try accessing via localhost or HTTPS.');
+            }
+
+            // Check if the API is available (some browsers may have it disabled)
+            if (!navigator.serial.requestPort) {
+                throw new Error('Web Serial API is disabled or not available. Please enable it in your browser settings.');
             }
 
             // Request a port and open it

@@ -9,6 +9,8 @@ class FluidNCWebUI {
         this.verboseMode = false;
         this.debugMode = false;
         this.autoScroll = true;
+        this.currentFileTab = 'local';
+        this.currentMacroId = null;
         this.savedWebSocketUrls = this.loadSavedUrls();
         this.macros = this.loadMacros();
         this.spindleSpeed = 0;
@@ -206,16 +208,33 @@ class FluidNCWebUI {
             });
         });
 
-        // Macro controls
-        document.querySelectorAll('.macro-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const macroNum = e.target.dataset.macro;
-                this.runMacro(macroNum);
-            });
+        // Macro controls - enhanced management
+        document.getElementById('macro-select').addEventListener('change', (e) => {
+            this.loadMacroForEditing(e.target.value);
+        });
+        
+        document.getElementById('add-macro').addEventListener('click', () => {
+            this.addNewMacro();
+        });
+        
+        document.getElementById('delete-macro').addEventListener('click', () => {
+            this.deleteMacro();
         });
 
         document.getElementById('save-macro').addEventListener('click', () => {
             this.saveMacro();
+        });
+        
+        document.getElementById('run-macro').addEventListener('click', () => {
+            this.runCurrentMacro();
+        });
+        
+        document.getElementById('macro-name').addEventListener('input', () => {
+            this.updateMacroButtons();
+        });
+        
+        document.getElementById('macro-content').addEventListener('input', () => {
+            this.updateMacroButtons();
         });
 
         // Spindle controls
@@ -604,9 +623,12 @@ class FluidNCWebUI {
                 }
             }
             
-            // Debug: log all file-related responses
-            if (this.debugMode) {
-                this.addConsoleMessage(`[DEBUG] File response: ${response}`, 'debug');
+            // Also check for other possible FluidNC file response formats
+            if (response.startsWith('[FILE:') || response.startsWith('[DIR:')) {
+                // Debug: log all file-related responses
+                if (this.debugMode) {
+                    this.addConsoleMessage(`[DEBUG] File response: ${response}`, 'debug');
+                }
             }
         } catch (error) {
             console.error('Error parsing file list response:', error);
@@ -614,10 +636,24 @@ class FluidNCWebUI {
     }
 
     addFileToList(name, size, type) {
-        // Determine which file list to update based on current tab
-        const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
-        const fileListId = `${activeTab}-file-list`;
+        // Determine which file list to update based on current file loading tab
+        let fileListId;
+        if (this.currentFileTab === 'sd') {
+            fileListId = 'sd-file-list';
+        } else if (this.currentFileTab === 'flash') {
+            fileListId = 'flash-file-list';
+        } else {
+            // Fallback to active tab
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab) {
+                fileListId = `${activeTab.dataset.tab}-file-list`;
+            } else {
+                return; // No active tab
+            }
+        }
+        
         const fileList = document.getElementById(fileListId);
+        if (!fileList) return;
         
         // Create or update file list if it's showing placeholder text
         if (fileList.querySelector('p')) {
@@ -803,6 +839,9 @@ class FluidNCWebUI {
         document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
         document.getElementById(`${tab}-files`).classList.add('active');
         
+        // Update current tab tracker
+        this.currentFileTab = tab;
+        
         // Load files for SD/Flash tabs
         if (tab === 'sd') {
             this.loadSDFiles();
@@ -821,13 +860,19 @@ class FluidNCWebUI {
         const fileList = document.getElementById('sd-file-list');
         fileList.innerHTML = '<p>Loading SD card files...</p>';
         
+        // Clear previous file list and mark we're loading SD files
+        this.currentFileTab = 'sd';
+        
         // Use FluidNC's file listing command for SD card
-        this.sendCommand('$SD/List').then(() => {
-            // Response will be handled by parseFileListResponse
-        }).catch(error => {
-            fileList.innerHTML = '<p>Error loading SD card files</p>';
-            this.addConsoleMessage(`SD card error: ${error.message}`, 'error');
-        });
+        this.sendCommandNoWait('$SD/List');
+        this.addConsoleMessage('Requesting SD card file list...', 'info');
+        
+        // Set a timeout to show error if no files are received
+        setTimeout(() => {
+            if (fileList.innerHTML.includes('Loading SD card files...')) {
+                fileList.innerHTML = '<p>No SD card found or no files available</p>';
+            }
+        }, 5000);
     }
 
     loadFlashFiles() {
@@ -840,23 +885,183 @@ class FluidNCWebUI {
         const fileList = document.getElementById('flash-file-list');
         fileList.innerHTML = '<p>Loading flash files...</p>';
         
+        // Clear previous file list and mark we're loading flash files
+        this.currentFileTab = 'flash';
+        
         // Use FluidNC's file listing command for flash/SPIFFS
-        this.sendCommand('$LocalFS/List').then(() => {
-            // Response will be handled by parseFileListResponse
-        }).catch(error => {
-            fileList.innerHTML = '<p>Error loading flash files</p>';
-            this.addConsoleMessage(`Flash storage error: ${error.message}`, 'error');
+        this.sendCommandNoWait('$LocalFS/List');
+        this.addConsoleMessage('Requesting flash file list...', 'info');
+        
+        // Set a timeout to show error if no files are received
+        setTimeout(() => {
+            if (fileList.innerHTML.includes('Loading flash files...')) {
+                fileList.innerHTML = '<p>No flash storage found or no files available</p>';
+            }
+        }, 5000);
+    }
+
+    // Enhanced Macro management
+    loadMacros() {
+        const saved = localStorage.getItem('fluidnc-macros');
+        return saved ? JSON.parse(saved) : {};
+    }
+
+    saveMacros() {
+        localStorage.setItem('fluidnc-macros', JSON.stringify(this.macros));
+    }
+
+    setupMacros() {
+        this.populateMacroSelect();
+        this.createQuickButtons();
+        this.updateMacroButtons();
+    }
+    
+    populateMacroSelect() {
+        const select = document.getElementById('macro-select');
+        select.innerHTML = '<option value="">New Macro...</option>';
+        
+        Object.keys(this.macros).forEach(macroId => {
+            const macro = this.macros[macroId];
+            const option = document.createElement('option');
+            option.value = macroId;
+            option.textContent = macro.name || `Macro ${macroId}`;
+            select.appendChild(option);
         });
     }
-
-    runMacro(macroNum) {
-        this.sendCommand(`$${macroNum}`);
+    
+    createQuickButtons() {
+        const container = document.getElementById('macro-quick-buttons');
+        container.innerHTML = '';
+        
+        Object.keys(this.macros).forEach(macroId => {
+            const macro = this.macros[macroId];
+            const button = document.createElement('button');
+            button.className = 'btn btn-sm macro-quick-btn';
+            button.innerHTML = `<i class="fas fa-play"></i> ${macro.name || `Macro ${macroId}`}`;
+            button.onclick = () => this.runMacroById(macroId);
+            container.appendChild(button);
+        });
     }
-
+    
+    loadMacroForEditing(macroId) {
+        const nameInput = document.getElementById('macro-name');
+        const contentInput = document.getElementById('macro-content');
+        const deleteBtn = document.getElementById('delete-macro');
+        
+        if (macroId && this.macros[macroId]) {
+            const macro = this.macros[macroId];
+            nameInput.value = macro.name || '';
+            contentInput.value = macro.content || '';
+            deleteBtn.disabled = false;
+        } else {
+            nameInput.value = '';
+            contentInput.value = '';
+            deleteBtn.disabled = true;
+        }
+        
+        this.currentMacroId = macroId;
+        this.updateMacroButtons();
+    }
+    
+    addNewMacro() {
+        const newId = Date.now().toString();
+        document.getElementById('macro-select').value = '';
+        this.currentMacroId = newId;
+        this.loadMacroForEditing('');
+    }
+    
+    deleteMacro() {
+        if (!this.currentMacroId || !this.macros[this.currentMacroId]) return;
+        
+        if (confirm('Are you sure you want to delete this macro?')) {
+            delete this.macros[this.currentMacroId];
+            this.saveMacros();
+            this.populateMacroSelect();
+            this.createQuickButtons();
+            this.loadMacroForEditing('');
+            this.addConsoleMessage('Macro deleted', 'info');
+        }
+    }
+    
     saveMacro() {
-        const content = document.getElementById('macro-content').value;
-        // Implementation for saving macros would depend on FluidNC's macro system
-        this.addConsoleMessage(`Macro content: ${content}`, 'info');
+        const nameInput = document.getElementById('macro-name');
+        const contentInput = document.getElementById('macro-content');
+        const name = nameInput.value.trim();
+        const content = contentInput.value.trim();
+        
+        if (!name) {
+            this.addConsoleMessage('Please enter a macro name', 'error');
+            return;
+        }
+        
+        if (!content) {
+            this.addConsoleMessage('Please enter macro content', 'error');
+            return;
+        }
+        
+        const macroId = this.currentMacroId || Date.now().toString();
+        this.macros[macroId] = {
+            name: name,
+            content: content,
+            created: new Date().toISOString()
+        };
+        
+        this.saveMacros();
+        this.populateMacroSelect();
+        this.createQuickButtons();
+        
+        // Update the select to show the saved macro
+        document.getElementById('macro-select').value = macroId;
+        this.currentMacroId = macroId;
+        
+        this.addConsoleMessage(`Macro "${name}" saved`, 'info');
+        this.updateMacroButtons();
+    }
+    
+    runCurrentMacro() {
+        const content = document.getElementById('macro-content').value.trim();
+        if (!content) {
+            this.addConsoleMessage('No macro content to run', 'error');
+            return;
+        }
+        
+        this.runMacroContent(content);
+    }
+    
+    runMacroById(macroId) {
+        if (!this.macros[macroId]) {
+            this.addConsoleMessage(`Macro not found: ${macroId}`, 'error');
+            return;
+        }
+        
+        this.runMacroContent(this.macros[macroId].content);
+    }
+    
+    runMacroContent(content) {
+        if (!this.isConnected) {
+            this.addConsoleMessage('Not connected to device', 'error');
+            return;
+        }
+        
+        const lines = content.split('\n').filter(line => line.trim());
+        this.addConsoleMessage(`Running macro with ${lines.length} commands...`, 'info');
+        
+        // Send each line as a separate command
+        lines.forEach((line, index) => {
+            setTimeout(() => {
+                this.sendCommandNoWait(line.trim());
+            }, index * 100); // Small delay between commands
+        });
+    }
+    
+    updateMacroButtons() {
+        const name = document.getElementById('macro-name').value.trim();
+        const content = document.getElementById('macro-content').value.trim();
+        const saveBtn = document.getElementById('save-macro');
+        const runBtn = document.getElementById('run-macro');
+        
+        saveBtn.disabled = !name || !content;
+        runBtn.disabled = !content || !this.isConnected;
     }
 
     sendOverrideCommand(cmd) {
@@ -938,21 +1143,6 @@ class FluidNCWebUI {
         this.saveSavedUrls();
         this.populateWebSocketUrlDropdown();
         this.addConsoleMessage(`WebSocket URL saved: ${name || url}`, 'info');
-    }
-
-    // Macro management
-    loadMacros() {
-        const saved = localStorage.getItem('fluidnc-macros');
-        return saved ? JSON.parse(saved) : {};
-    }
-
-    saveMacros() {
-        localStorage.setItem('fluidnc-macros', JSON.stringify(this.macros));
-    }
-
-    setupMacros() {
-        // Setup macro functionality
-        // Load existing macros from storage
     }
 
     setupSpindleControls() {

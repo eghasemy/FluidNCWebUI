@@ -282,16 +282,36 @@
                 <section class="macros-panel panel">
                     <h2><i class="fas fa-list"></i> Macros</h2>
                     
-                    <div class="macro-buttons">
-                        <button class="macro-btn" data-macro="0">Macro 0</button>
-                        <button class="macro-btn" data-macro="1">Macro 1</button>
-                        <button class="macro-btn" data-macro="2">Macro 2</button>
-                        <button class="macro-btn" data-macro="3">Macro 3</button>
-                    </div>
-
-                    <div class="macro-editor">
-                        <textarea id="macro-content" placeholder="Enter macro G-code commands..."></textarea>
-                        <button id="save-macro" class="btn">Save Macro</button>
+                    <div class="macro-management">
+                        <div class="macro-selector">
+                            <label>Select Macro:</label>
+                            <select id="macro-select" class="input">
+                                <option value="">New Macro...</option>
+                            </select>
+                            <button id="add-macro" class="btn btn-sm">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                            <button id="delete-macro" class="btn btn-sm" disabled>
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                        
+                        <div class="macro-editor">
+                            <input type="text" id="macro-name" placeholder="Macro name..." class="input" style="margin-bottom: 0.5rem;">
+                            <textarea id="macro-content" placeholder="Enter macro G-code commands..."></textarea>
+                            <div class="macro-actions">
+                                <button id="save-macro" class="btn" disabled>
+                                    <i class="fas fa-save"></i> Save Macro
+                                </button>
+                                <button id="run-macro" class="btn" disabled>
+                                    <i class="fas fa-play"></i> Run Macro
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="macro-quick-buttons" id="macro-quick-buttons">
+                            <!-- Dynamic macro buttons will be added here -->
+                        </div>
                     </div>
                 </section>
 
