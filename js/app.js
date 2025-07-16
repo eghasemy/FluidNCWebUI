@@ -7,6 +7,7 @@ class FluidNCWebUI {
         this.machinePosition = { x: 0, y: 0, z: 0 };
         this.machineState = 'Idle';
         this.verboseMode = false;
+        this.debugMode = false;
         this.autoScroll = true;
         
         this.serialComm = new SerialCommunication();
@@ -178,6 +179,10 @@ class FluidNCWebUI {
             this.verboseMode = e.target.checked;
         });
 
+        document.getElementById('debug-mode').addEventListener('change', (e) => {
+            this.debugMode = e.target.checked;
+        });
+
         document.getElementById('autoscroll').addEventListener('change', (e) => {
             this.autoScroll = e.target.checked;
         });
@@ -285,11 +290,31 @@ class FluidNCWebUI {
             this.isConnected = true;
             this.updateConnectionStatus('connected');
             this.enableControls();
-            this.startStatusUpdates();
+            
+            // Wait a moment for connection to stabilize, then start status updates
+            setTimeout(() => {
+                this.startStatusUpdates();
+                // Request initial status and position
+                this.requestInitialStatus();
+            }, 1000);
+            
             this.addConsoleMessage('WebSocket connection established', 'info');
         } catch (error) {
             this.addConsoleMessage(`WebSocket connection failed: ${error.message}`, 'error');
             this.updateConnectionStatus('disconnected');
+        }
+    }
+
+    async requestInitialStatus() {
+        try {
+            // Request current status and position
+            await this.websocketComm.sendCommandNoWait('?');
+            await this.websocketComm.sendCommandNoWait('$G'); // Get current G-code state
+            await this.websocketComm.sendCommandNoWait('$#'); // Get coordinate systems
+            
+            this.addConsoleMessage('Requesting initial machine status...', 'info');
+        } catch (error) {
+            console.error('Initial status request error:', error);
         }
     }
 
@@ -428,30 +453,79 @@ class FluidNCWebUI {
     }
 
     parseResponse(response) {
-        // Parse status reports and position updates
+        // Debug mode: log all raw responses
+        if (this.debugMode) {
+            this.addConsoleMessage(`[DEBUG] Raw response: ${response}`, 'debug');
+        }
+        
+        // Parse different types of responses from FluidNC
+        
+        // Parse status reports (format: <Idle|MPos:0.000,0.000,0.000|FS:0,0>)
         if (response.startsWith('<') && response.endsWith('>')) {
-            const statusMatch = response.match(/<([^|]+)\|([^>]+)>/);
-            if (statusMatch) {
-                const state = statusMatch[1];
+            this.parseStatusReport(response);
+            return;
+        }
+        
+        // Parse position reports (format: [MSG:INFO: Current position: X:0.00 Y:0.00 Z:0.00])
+        if (response.includes('Current position:')) {
+            this.parsePositionReport(response);
+            return;
+        }
+        
+        // Parse file listing responses
+        if (response.includes('[FILE:') || response.includes('[DIR:')) {
+            this.parseFileListResponse(response);
+            return;
+        }
+        
+        // Parse machine state changes
+        if (response.includes('[MSG:INFO:') && (response.includes('Idle') || response.includes('Run') || response.includes('Hold'))) {
+            this.parseMachineStateMessage(response);
+            return;
+        }
+        
+        // Parse error messages
+        if (response.startsWith('error:')) {
+            this.addConsoleMessage(response, 'error');
+            return;
+        }
+        
+        // Parse ok responses
+        if (response.trim() === 'ok') {
+            // Don't log simple ok responses unless in verbose mode
+            if (this.verboseMode) {
+                this.addConsoleMessage(response, 'received');
+            }
+            return;
+        }
+        
+        // Default: log all other responses
+        this.addConsoleMessage(response, 'received');
+    }
+
+    parseStatusReport(response) {
+        try {
+            // Handle FluidNC status format: <Idle|MPos:0.000,0.000,0.000|WPos:0.000,0.000,0.000|FS:0,0>
+            const content = response.slice(1, -1); // Remove < >
+            const parts = content.split('|');
+            
+            if (parts.length > 0) {
+                const state = parts[0];
                 this.updateMachineState(state);
-                
-                // Parse position data
-                const posData = statusMatch[2];
-                const mposMatch = posData.match(/MPos:([^|]+)/);
-                const wposMatch = posData.match(/WPos:([^|]+)/);
-                
-                if (mposMatch) {
-                    const coords = mposMatch[1].split(',');
+            }
+            
+            // Parse position data
+            parts.forEach(part => {
+                if (part.startsWith('MPos:')) {
+                    const coords = part.substring(5).split(',');
                     this.machinePosition = {
                         x: parseFloat(coords[0]) || 0,
                         y: parseFloat(coords[1]) || 0,
                         z: parseFloat(coords[2]) || 0
                     };
                     this.updatePositionDisplay('mpos', this.machinePosition);
-                }
-                
-                if (wposMatch) {
-                    const coords = wposMatch[1].split(',');
+                } else if (part.startsWith('WPos:')) {
+                    const coords = part.substring(5).split(',');
                     this.currentPosition = {
                         x: parseFloat(coords[0]) || 0,
                         y: parseFloat(coords[1]) || 0,
@@ -459,7 +533,55 @@ class FluidNCWebUI {
                     };
                     this.updatePositionDisplay('wpos', this.currentPosition);
                 }
+            });
+            
+            // Only log status reports in verbose mode
+            if (this.verboseMode) {
+                this.addConsoleMessage(response, 'received');
             }
+        } catch (error) {
+            console.error('Error parsing status report:', error);
+        }
+    }
+
+    parsePositionReport(response) {
+        try {
+            // Parse position from messages like: [MSG:INFO: Current position: X:0.00 Y:0.00 Z:0.00]
+            const xMatch = response.match(/X:([-\d.]+)/);
+            const yMatch = response.match(/Y:([-\d.]+)/);
+            const zMatch = response.match(/Z:([-\d.]+)/);
+            
+            if (xMatch && yMatch && zMatch) {
+                this.currentPosition = {
+                    x: parseFloat(xMatch[1]) || 0,
+                    y: parseFloat(yMatch[1]) || 0,
+                    z: parseFloat(zMatch[1]) || 0
+                };
+                this.updatePositionDisplay('wpos', this.currentPosition);
+            }
+        } catch (error) {
+            console.error('Error parsing position report:', error);
+        }
+    }
+
+    parseFileListResponse(response) {
+        // Handle file listing responses from FluidNC
+        console.log('File list response:', response);
+        // Implementation depends on actual FluidNC file listing format
+    }
+
+    parseMachineStateMessage(response) {
+        try {
+            // Parse state from messages like: [MSG:INFO: Machine state changed to Idle]
+            if (response.includes('Idle')) {
+                this.updateMachineState('Idle');
+            } else if (response.includes('Run')) {
+                this.updateMachineState('Run');
+            } else if (response.includes('Hold')) {
+                this.updateMachineState('Hold');
+            }
+        } catch (error) {
+            console.error('Error parsing machine state:', error);
         }
     }
 
@@ -472,9 +594,23 @@ class FluidNCWebUI {
     startStatusUpdates() {
         this.statusInterval = setInterval(() => {
             if (this.isConnected) {
-                this.sendCommand('?');
+                // Use status query command that works with FluidNC WebSocket
+                this.requestStatus();
             }
         }, 1000);
+    }
+
+    async requestStatus() {
+        try {
+            if (this.connectionType === 'usb') {
+                await this.sendCommand('?');
+            } else {
+                // For WebSocket, send status request directly without waiting for response
+                await this.websocketComm.sendCommandNoWait('?');
+            }
+        } catch (error) {
+            console.error('Status request error:', error);
+        }
     }
 
     stopStatusUpdates() {
@@ -586,18 +722,40 @@ class FluidNCWebUI {
     }
 
     loadSDFiles() {
-        this.sendCommand('$FM/STA').then(response => {
-            // Parse SD card file list
+        if (!this.isConnected) {
             const fileList = document.getElementById('sd-file-list');
-            fileList.innerHTML = '<p>Loading SD card files...</p>';
+            fileList.innerHTML = '<p>Not connected to device</p>';
+            return;
+        }
+        
+        const fileList = document.getElementById('sd-file-list');
+        fileList.innerHTML = '<p>Loading SD card files...</p>';
+        
+        // Use FluidNC's file listing command for SD card
+        this.sendCommand('$SD/List').then(() => {
+            // Response will be handled by parseFileListResponse
+        }).catch(error => {
+            fileList.innerHTML = '<p>Error loading SD card files</p>';
+            this.addConsoleMessage(`SD card error: ${error.message}`, 'error');
         });
     }
 
     loadFlashFiles() {
-        this.sendCommand('$FM/Localfs').then(response => {
-            // Parse flash file list
+        if (!this.isConnected) {
             const fileList = document.getElementById('flash-file-list');
-            fileList.innerHTML = '<p>Loading flash files...</p>';
+            fileList.innerHTML = '<p>Not connected to device</p>';
+            return;
+        }
+        
+        const fileList = document.getElementById('flash-file-list');
+        fileList.innerHTML = '<p>Loading flash files...</p>';
+        
+        // Use FluidNC's file listing command for flash/SPIFFS
+        this.sendCommand('$LocalFS/List').then(() => {
+            // Response will be handled by parseFileListResponse
+        }).catch(error => {
+            fileList.innerHTML = '<p>Error loading flash files</p>';
+            this.addConsoleMessage(`Flash storage error: ${error.message}`, 'error');
         });
     }
 

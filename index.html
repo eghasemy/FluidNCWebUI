@@ -48,7 +48,7 @@
                 </div>
                 
                 <div class="websocket-controls" id="websocket-controls" style="display: none;">
-                    <input type="text" id="websocket-url" placeholder="ws://192.168.1.100:80/ws" class="input">
+                    <input type="text" id="websocket-url" placeholder="ws://fluidnc.local/ws" class="input">
                     <button id="connect-websocket" class="btn btn-primary">
                         <i class="fas fa-wifi"></i> Connect
                     </button>
@@ -193,6 +193,9 @@
                     <div class="terminal-controls">
                         <label>
                             <input type="checkbox" id="verbose-mode"> Verbose Mode
+                        </label>
+                        <label>
+                            <input type="checkbox" id="debug-mode"> Debug Mode
                         </label>
                         <label>
                             <input type="checkbox" id="autoscroll" checked> Auto Scroll

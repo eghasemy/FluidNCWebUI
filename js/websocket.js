@@ -98,20 +98,17 @@ class WebSocketCommunication {
             lines.forEach(line => {
                 line = line.trim();
                 if (line) {
-                    // Log the response
+                    // Parse the response first (this will handle filtering)
                     if (window.fluidNCApp) {
-                        // Don't log status reports to reduce console clutter unless in verbose mode
-                        if (!line.startsWith('<') || !line.endsWith('>') || window.fluidNCApp.verboseMode) {
-                            window.fluidNCApp.addConsoleMessage(line, 'received');
-                        }
-                        
-                        // Parse the response
                         window.fluidNCApp.parseResponse(line);
                     }
                 }
             });
         } catch (error) {
             console.error('Message handling error:', error);
+            if (window.fluidNCApp) {
+                window.fluidNCApp.addConsoleMessage(`Message handling error: ${error.message}`, 'error');
+            }
         }
     }
 

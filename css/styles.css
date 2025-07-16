@@ -469,6 +469,12 @@ body {
     color: #6c757d;
 }
 
+.console-message.debug {
+    color: #9c88ff;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
 .console-input {
     padding: 1rem;
     display: flex;
