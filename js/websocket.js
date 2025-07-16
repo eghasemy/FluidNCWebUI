@@ -92,6 +92,11 @@ class WebSocketCommunication {
 
     handleMessage(data) {
         try {
+            // Ensure data is a string
+            if (typeof data !== 'string') {
+                data = String(data);
+            }
+            
             // Handle plain text messages (FluidNC sends simple text responses)
             const lines = data.split('\n');
             

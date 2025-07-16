@@ -14,21 +14,36 @@ class SerialCommunication {
         try {
             // Check if Web Serial API is supported
             if (!('serial' in navigator)) {
-                throw new Error('Web Serial API not supported in this browser. Please use Chrome 89+, Edge 89+, or Opera 75+. Make sure you are using a Chromium-based browser.');
+                throw new Error('Web Serial API not supported in this browser. Please use Chrome 89+, Edge 89+, or Opera 75+.');
             }
 
             // Check if secure context (HTTPS or localhost)
             if (!window.isSecureContext) {
-                throw new Error('Web Serial API requires a secure context (HTTPS or localhost). Try accessing via localhost or HTTPS.');
+                throw new Error('Web Serial API requires a secure context (HTTPS or localhost).');
             }
 
-            // Check if the API is available (some browsers may have it disabled)
-            if (!navigator.serial.requestPort) {
-                throw new Error('Web Serial API is disabled or not available. Please enable it in your browser settings.');
+            // Check if the API methods are available
+            if (!navigator.serial || !navigator.serial.requestPort) {
+                throw new Error('Web Serial API is disabled or not available. Please enable Experimental Web Platform features in chrome://flags/');
+            }
+
+            // Check for permissions API
+            if (navigator.permissions) {
+                try {
+                    const permissionResult = await navigator.permissions.query({ name: 'serial' });
+                    console.log('Serial permission state:', permissionResult.state);
+                } catch (e) {
+                    console.log('Serial permission query not available');
+                }
             }
 
             // Request a port and open it
             this.port = await navigator.serial.requestPort();
+            
+            // Check if port was actually selected
+            if (!this.port) {
+                throw new Error('No serial port selected');
+            }
             
             await this.port.open({
                 baudRate: 115200,
@@ -50,6 +65,13 @@ class SerialCommunication {
             return true;
         } catch (error) {
             console.error('Serial connection error:', error);
+            if (error.name === 'NotFoundError') {
+                throw new Error('No serial port selected. Please select a port to connect.');
+            } else if (error.name === 'SecurityError') {
+                throw new Error('Serial port access denied. Please grant permission and try again.');
+            } else if (error.name === 'NetworkError') {
+                throw new Error('Serial port is already in use or not available.');
+            }
             throw error;
         }
     }

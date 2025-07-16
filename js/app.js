@@ -446,6 +446,23 @@ class FluidNCWebUI {
         }
     }
 
+    async sendCommandNoWait(command) {
+        if (!this.isConnected) {
+            this.addConsoleMessage('Not connected to device', 'error');
+            return;
+        }
+
+        try {
+            if (this.connectionType === 'usb') {
+                await this.serialComm.sendCommandNoWait(command);
+            } else {
+                await this.websocketComm.sendCommandNoWait(command);
+            }
+        } catch (error) {
+            this.addConsoleMessage(`Error: ${error.message}`, 'error');
+        }
+    }
+
     jog(axis, distance) {
         const command = `$J=G91 ${axis.toUpperCase()}${distance} F1000`;
         this.sendCommand(command);
@@ -623,8 +640,31 @@ class FluidNCWebUI {
                 }
             }
             
+            // Handle simpler file listing formats
+            if (response.includes('.gcode') || response.includes('.nc') || response.includes('.txt')) {
+                // Look for file names in the response
+                const fileMatches = response.match(/[\w\-_.]+\.(gcode|nc|txt|g)/gi);
+                if (fileMatches) {
+                    fileMatches.forEach(filename => {
+                        this.addFileToList(filename, '', 'file');
+                    });
+                }
+            }
+            
+            // Handle directory listings that show file sizes
+            const sizeMatches = response.match(/(\S+\.(gcode|nc|txt|g))\s+(\d+)/gi);
+            if (sizeMatches) {
+                sizeMatches.forEach(match => {
+                    const parts = match.split(/\s+/);
+                    if (parts.length >= 2) {
+                        this.addFileToList(parts[0], parts[1], 'file');
+                    }
+                });
+            }
+            
             // Also check for other possible FluidNC file response formats
-            if (response.startsWith('[FILE:') || response.startsWith('[DIR:')) {
+            if (response.startsWith('[FILE:') || response.startsWith('[DIR:') || 
+                response.includes('.gcode') || response.includes('.nc')) {
                 // Debug: log all file-related responses
                 if (this.debugMode) {
                     this.addConsoleMessage(`[DEBUG] File response: ${response}`, 'debug');
@@ -728,11 +768,10 @@ class FluidNCWebUI {
     async requestStatus() {
         try {
             if (this.connectionType === 'usb') {
-                await this.sendCommand('?');
+                await this.serialComm.sendCommandNoWait('?');
             } else {
-                // For WebSocket, send status request directly without waiting for response
-                // FluidNC responds to simple status query
-                this.websocketComm.socket.send('?');
+                // For WebSocket, send status request directly
+                await this.websocketComm.sendCommandNoWait('?');
             }
         } catch (error) {
             console.error('Status request error:', error);
@@ -863,8 +902,10 @@ class FluidNCWebUI {
         // Clear previous file list and mark we're loading SD files
         this.currentFileTab = 'sd';
         
-        // Use FluidNC's file listing command for SD card
+        // Try different FluidNC file listing commands for SD card
         this.sendCommandNoWait('$SD/List');
+        this.sendCommandNoWait('$LS/SD');
+        this.sendCommandNoWait('$ls'); // Some systems use lowercase
         this.addConsoleMessage('Requesting SD card file list...', 'info');
         
         // Set a timeout to show error if no files are received
@@ -888,8 +929,10 @@ class FluidNCWebUI {
         // Clear previous file list and mark we're loading flash files
         this.currentFileTab = 'flash';
         
-        // Use FluidNC's file listing command for flash/SPIFFS
+        // Try different FluidNC file listing commands for flash/SPIFFS
         this.sendCommandNoWait('$LocalFS/List');
+        this.sendCommandNoWait('$LS/SPIFFS');
+        this.sendCommandNoWait('$LS/LocalFS');
         this.addConsoleMessage('Requesting flash file list...', 'info');
         
         // Set a timeout to show error if no files are received
