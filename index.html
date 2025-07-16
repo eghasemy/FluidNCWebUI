@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FluidNC WebUI</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-cog"></i> FluidNC WebUI</h1>
+            <div class="connection-status">
+                <span id="connection-indicator" class="status-disconnected">
+                    <i class="fas fa-circle"></i> Disconnected
+                </span>
+            </div>
+        </header>
+
+        <!-- Connection Panel -->
+        <section class="connection-panel">
+            <div class="connection-controls">
+                <div class="connection-type">
+                    <label>
+                        <input type="radio" name="connection-type" value="usb" checked>
+                        <i class="fas fa-usb"></i> USB Serial
+                    </label>
+                    <label>
+                        <input type="radio" name="connection-type" value="websocket">
+                        <i class="fas fa-wifi"></i> WebSocket
+                    </label>
+                </div>
+                
+                <div class="usb-controls" id="usb-controls">
+                    <button id="connect-usb" class="btn btn-primary">
+                        <i class="fas fa-plug"></i> Connect USB
+                    </button>
+                    <button id="disconnect-usb" class="btn btn-secondary" disabled>
+                        <i class="fas fa-unlink"></i> Disconnect
+                    </button>
+                </div>
+                
+                <div class="websocket-controls" id="websocket-controls" style="display: none;">
+                    <input type="text" id="websocket-url" placeholder="ws://192.168.1.100:80/ws" class="input">
+                    <button id="connect-websocket" class="btn btn-primary">
+                        <i class="fas fa-wifi"></i> Connect
+                    </button>
+                    <button id="disconnect-websocket" class="btn btn-secondary" disabled>
+                        <i class="fas fa-unlink"></i> Disconnect
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Control Panel -->
+            <section class="control-panel">
+                <h2><i class="fas fa-gamepad"></i> Machine Control</h2>
+                
+                <!-- Emergency Stop -->
+                <div class="emergency-controls">
+                    <button id="emergency-stop" class="btn btn-danger btn-large">
+                        <i class="fas fa-stop"></i> EMERGENCY STOP
+                    </button>
+                    <button id="soft-reset" class="btn btn-warning">
+                        <i class="fas fa-power-off"></i> Soft Reset
+                    </button>
+                </div>
+
+                <!-- Homing Controls -->
+                <div class="homing-controls">
+                    <h3>Homing</h3>
+                    <button id="home-all" class="btn btn-primary">
+                        <i class="fas fa-home"></i> Home All
+                    </button>
+                    <button id="home-x" class="btn btn-secondary">Home X</button>
+                    <button id="home-y" class="btn btn-secondary">Home Y</button>
+                    <button id="home-z" class="btn btn-secondary">Home Z</button>
+                </div>
+
+                <!-- Jog Controls -->
+                <div class="jog-controls">
+                    <h3>Jog Control</h3>
+                    <div class="jog-distance">
+                        <label>Step Size:</label>
+                        <select id="jog-distance">
+                            <option value="0.1">0.1mm</option>
+                            <option value="1" selected>1mm</option>
+                            <option value="10">10mm</option>
+                            <option value="100">100mm</option>
+                        </select>
+                    </div>
+                    
+                    <div class="jog-xy">
+                        <div class="jog-row">
+                            <button class="jog-btn" data-axis="y" data-direction="1">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                        </div>
+                        <div class="jog-row">
+                            <button class="jog-btn" data-axis="x" data-direction="-1">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <button class="jog-btn" data-axis="x" data-direction="1">
+                                <i class="fas fa-arrow-right"></i>
+                            </button>
+                        </div>
+                        <div class="jog-row">
+                            <button class="jog-btn" data-axis="y" data-direction="-1">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="jog-z">
+                        <button class="jog-btn" data-axis="z" data-direction="1">
+                            <i class="fas fa-arrow-up"></i> Z+
+                        </button>
+                        <button class="jog-btn" data-axis="z" data-direction="-1">
+                            <i class="fas fa-arrow-down"></i> Z-
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Position Display -->
+                <div class="position-display">
+                    <h3>Position</h3>
+                    <div class="coordinates">
+                        <div class="coord-group">
+                            <label>Machine Position:</label>
+                            <div class="coord-values">
+                                <span>X: <span id="mpos-x">0.000</span></span>
+                                <span>Y: <span id="mpos-y">0.000</span></span>
+                                <span>Z: <span id="mpos-z">0.000</span></span>
+                            </div>
+                        </div>
+                        <div class="coord-group">
+                            <label>Work Position:</label>
+                            <div class="coord-values">
+                                <span>X: <span id="wpos-x">0.000</span></span>
+                                <span>Y: <span id="wpos-y">0.000</span></span>
+                                <span>Z: <span id="wpos-z">0.000</span></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="zero-controls">
+                        <button id="zero-x" class="btn btn-small">Zero X</button>
+                        <button id="zero-y" class="btn btn-small">Zero Y</button>
+                        <button id="zero-z" class="btn btn-small">Zero Z</button>
+                        <button id="zero-all" class="btn btn-small">Zero All</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- G-code Panel -->
+            <section class="gcode-panel">
+                <h2><i class="fas fa-file-code"></i> G-code</h2>
+                
+                <div class="gcode-controls">
+                    <input type="file" id="gcode-file" accept=".nc,.gcode,.txt" style="display: none;">
+                    <button id="load-gcode" class="btn btn-primary">
+                        <i class="fas fa-folder-open"></i> Load G-code
+                    </button>
+                    <button id="start-job" class="btn btn-success" disabled>
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                    <button id="pause-job" class="btn btn-warning" disabled>
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button id="stop-job" class="btn btn-danger" disabled>
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                </div>
+
+                <div class="gcode-progress">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <span id="progress-text">0%</span>
+                </div>
+
+                <div class="gcode-viewer">
+                    <textarea id="gcode-content" placeholder="G-code will appear here..." readonly></textarea>
+                </div>
+            </section>
+
+            <!-- Enhanced Probing Panel -->
+            <section class="probing-panel">
+                <h2><i class="fas fa-search"></i> Enhanced Probing</h2>
+                
+                <!-- Probe Parameters -->
+                <div class="probe-parameters">
+                    <h3>Probe Parameters</h3>
+                    <div class="param-grid">
+                        <label>Rapid Feed Rate (mm/min):</label>
+                        <input type="number" id="rapid-fr" value="3000" min="100" max="10000">
+                        
+                        <label>Search Feed Rate (mm/min):</label>
+                        <input type="number" id="search-fr" value="200" min="10" max="1000">
+                        
+                        <label>Latch Feed Rate (mm/min):</label>
+                        <input type="number" id="latch-fr" value="50" min="5" max="500">
+                        
+                        <label>Max Probing Distance (mm):</label>
+                        <input type="number" id="probing-dist" value="25" min="1" max="100">
+                        
+                        <label>Latch Distance (mm):</label>
+                        <input type="number" id="latch-dist" value="2" min="0.1" max="10" step="0.1">
+                        
+                        <label>Probe Diameter (mm):</label>
+                        <input type="number" id="probe-diameter" value="2" min="0.1" max="20" step="0.1">
+                        
+                        <label>XY Clearance (mm):</label>
+                        <input type="number" id="xy-clearance" value="10" min="1" max="50">
+                        
+                        <label>Z Probing Depth (mm):</label>
+                        <input type="number" id="probing-depth" value="5" min="1" max="50">
+                    </div>
+                </div>
+
+                <!-- Probing Routines -->
+                <div class="probing-routines">
+                    <h3>Probing Routines</h3>
+                    
+                    <!-- Edge Finding -->
+                    <div class="routine-group">
+                        <h4>Edge Finding</h4>
+                        <div class="routine-buttons">
+                            <button class="probe-btn" data-routine="edge-top">
+                                <i class="fas fa-arrow-up"></i> Top Edge
+                            </button>
+                            <button class="probe-btn" data-routine="edge-bottom">
+                                <i class="fas fa-arrow-down"></i> Bottom Edge
+                            </button>
+                            <button class="probe-btn" data-routine="edge-left">
+                                <i class="fas fa-arrow-left"></i> Left Edge
+                            </button>
+                            <button class="probe-btn" data-routine="edge-right">
+                                <i class="fas fa-arrow-right"></i> Right Edge
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Corner Finding -->
+                    <div class="routine-group">
+                        <h4>Corner Finding</h4>
+                        <div class="routine-buttons">
+                            <button class="probe-btn" data-routine="corner-tl">
+                                <i class="fas fa-arrow-up"></i><i class="fas fa-arrow-left"></i> Top-Left
+                            </button>
+                            <button class="probe-btn" data-routine="corner-tr">
+                                <i class="fas fa-arrow-up"></i><i class="fas fa-arrow-right"></i> Top-Right
+                            </button>
+                            <button class="probe-btn" data-routine="corner-bl">
+                                <i class="fas fa-arrow-down"></i><i class="fas fa-arrow-left"></i> Bottom-Left
+                            </button>
+                            <button class="probe-btn" data-routine="corner-br">
+                                <i class="fas fa-arrow-down"></i><i class="fas fa-arrow-right"></i> Bottom-Right
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Center Finding -->
+                    <div class="routine-group">
+                        <h4>Center Finding</h4>
+                        <div class="routine-buttons">
+                            <button class="probe-btn" data-routine="center-external">
+                                <i class="fas fa-expand"></i> External Center
+                            </button>
+                            <button class="probe-btn" data-routine="center-internal">
+                                <i class="fas fa-compress"></i> Internal Center
+                            </button>
+                        </div>
+                        <div class="center-params">
+                            <label>External Diameter (mm):</label>
+                            <input type="number" id="external-diameter" value="20" min="1" max="200">
+                            <label>Internal Diameter (mm):</label>
+                            <input type="number" id="internal-diameter" value="10" min="1" max="200">
+                        </div>
+                    </div>
+
+                    <!-- Height Mapping -->
+                    <div class="routine-group">
+                        <h4>Height Mapping</h4>
+                        <div class="height-map-controls">
+                            <div class="map-params">
+                                <label>Grid Size X:</label>
+                                <input type="number" id="grid-x" value="5" min="2" max="20">
+                                <label>Grid Size Y:</label>
+                                <input type="number" id="grid-y" value="5" min="2" max="20">
+                                <label>Area Width (mm):</label>
+                                <input type="number" id="area-width" value="50" min="5" max="500">
+                                <label>Area Height (mm):</label>
+                                <input type="number" id="area-height" value="50" min="5" max="500">
+                            </div>
+                            <button class="probe-btn" data-routine="height-map">
+                                <i class="fas fa-map"></i> Generate Height Map
+                            </button>
+                            <button id="apply-height-map" class="btn btn-success" disabled>
+                                Apply Height Map to G-code
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Rotation Detection -->
+                    <div class="routine-group">
+                        <h4>Rotation Detection</h4>
+                        <div class="rotation-controls">
+                            <button class="probe-btn" data-routine="detect-rotation">
+                                <i class="fas fa-sync"></i> Detect Rotation
+                            </button>
+                            <div class="rotation-display">
+                                <label>Detected Angle:</label>
+                                <span id="rotation-angle">0.000°</span>
+                            </div>
+                            <button id="apply-rotation" class="btn btn-success" disabled>
+                                Apply Rotation to G-code
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Console -->
+            <section class="console-panel">
+                <h2><i class="fas fa-terminal"></i> Console</h2>
+                <div class="console-output" id="console-output"></div>
+                <div class="console-input">
+                    <input type="text" id="command-input" placeholder="Enter G-code command..." class="input">
+                    <button id="send-command" class="btn btn-primary">Send</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/serial.js"></script>
+    <script src="js/websocket.js"></script>
+    <script src="js/gcode.js"></script>
+    <script src="js/probing.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
