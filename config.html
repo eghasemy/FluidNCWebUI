@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FluidNC Configuration Editor</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .config-editor {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .config-controls {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .config-textarea {
+            width: 100%;
+            height: 600px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 1rem;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+            resize: vertical;
+        }
+        
+        .config-textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            background: white;
+        }
+        
+        .config-status {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 6px;
+            display: none;
+        }
+        
+        .config-status.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .config-status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #dee2e6;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .navbar-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar h1 {
+            color: #3498db;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-cog"></i> FluidNC WebUI</h1>
+            <div class="connection-status">
+                <span id="connection-indicator" class="status-disconnected">
+                    <i class="fas fa-circle"></i> Disconnected
+                </span>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <h1><i class="fas fa-file-code"></i> Configuration Editor</h1>
+                <a href="index.html" class="btn">
+                    <i class="fas fa-arrow-left"></i> Back to Main
+                </a>
+            </div>
+        </nav>
+
+        <!-- Config Editor -->
+        <main class="config-editor">
+            <div class="config-controls">
+                <button id="load-config" class="btn">
+                    <i class="fas fa-download"></i> Load from FluidNC
+                </button>
+                <button id="save-config" class="btn btn-success" disabled>
+                    <i class="fas fa-save"></i> Save to FluidNC
+                </button>
+                <button id="restart-fluidnc" class="btn btn-warning" disabled>
+                    <i class="fas fa-power-off"></i> Restart FluidNC
+                </button>
+                <button id="reset-config" class="btn btn-danger">
+                    <i class="fas fa-undo"></i> Reset to Default
+                </button>
+                <input type="file" id="config-file" accept=".yaml,.yml" style="display: none;">
+                <button id="load-file" class="btn">
+                    <i class="fas fa-folder-open"></i> Load from File
+                </button>
+                <button id="download-config" class="btn" disabled>
+                    <i class="fas fa-download"></i> Download
+                </button>
+            </div>
+
+            <textarea id="config-content" class="config-textarea" placeholder="Configuration will appear here...
+Click 'Load from FluidNC' to retrieve current configuration.
+
+Example config.yaml structure:
+
+name: FluidNC WebUI
+board: FluidNC:esp32
+
+stepping:
+  engine: RMT
+  idle_ms: 250
+  pulse_us: 4
+  dir_delay_us: 1
+
+axes:
+  x:
+    steps_per_mm: 250
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 300
+    soft_limits: false
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 200
+      seek_mm_per_min: 800
+      settle_ms: 500
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+
+  y:
+    steps_per_mm: 250
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 300
+    soft_limits: false
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 200
+      seek_mm_per_min: 800
+      settle_ms: 500
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+
+  z:
+    steps_per_mm: 250
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 200
+    soft_limits: false
+    homing:
+      cycle: 2
+      positive_direction: true
+      mpos_mm: 200
+      feed_mm_per_min: 200
+      seek_mm_per_min: 800
+      settle_ms: 500
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+
+spi:
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+
+control:
+  safety_door_pin: NO_PIN
+  reset_pin: NO_PIN
+  feed_hold_pin: NO_PIN
+  cycle_start_pin: NO_PIN
+  macro0_pin: NO_PIN
+  macro1_pin: NO_PIN
+  macro2_pin: NO_PIN
+  macro3_pin: NO_PIN
+
+coolant:
+  flood_pin: NO_PIN
+  mist_pin: NO_PIN
+
+probe:
+  pin: gpio.22
+  check_mode_start: true
+
+macros:
+  n0:
+  n1:
+  n2:
+  n3:
+
+user_outputs:
+  analog0_pin: NO_PIN
+  analog1_pin: NO_PIN
+  analog2_pin: NO_PIN
+  analog3_pin: NO_PIN
+  analog_frequency: 5000
+  digital0_pin: NO_PIN
+  digital1_pin: NO_PIN
+  digital2_pin: NO_PIN
+  digital3_pin: NO_PIN
+
+software_debounce_ms: 0
+arc_tolerance: 0.002
+junction_deviation: 0.01
+verbose_errors: false
+report_inches: false
+homing_init_lock: true
+enable_parking_override_control: false
+deactivate_parking_upon_init: false
+check_limits_at_init: false
+hard_limit_enable: false
+soft_limit_enable: false
+laser_mode: false
+invert_st_enable: false
+step_pulse_microseconds: 10
+step_idle_delay: 25
+step_pulse_delay: 10
+dir_invert_mask: 0
+stepping_invert_mask: 0
+status_mask: 1
+steps_per_mm_x: 250.0
+steps_per_mm_y: 250.0
+steps_per_mm_z: 250.0
+max_rate_x: 5000.0
+max_rate_y: 5000.0
+max_rate_z: 5000.0
+max_acceleration_x: 100.0
+max_acceleration_y: 100.0
+max_acceleration_z: 100.0
+max_travel_x: 300.0
+max_travel_y: 300.0
+max_travel_z: 200.0
+"></textarea>
+
+            <div id="config-status" class="config-status"></div>
+        </main>
+    </div>
+
+    <script src="js/serial.js"></script>
+    <script src="js/websocket.js"></script>
+    <script>
+        // Configuration Editor
+        class ConfigEditor {
+            constructor() {
+                this.serialComm = new SerialCommunication();
+                this.websocketComm = new WebSocketCommunication();
+                this.isConnected = false;
+                this.connectionType = 'usb';
+                this.hasChanges = false;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.checkConnection();
+            }
+
+            setupEventListeners() {
+                document.getElementById('load-config').addEventListener('click', () => {
+                    this.loadConfigFromFluidNC();
+                });
+
+                document.getElementById('save-config').addEventListener('click', () => {
+                    this.saveConfigToFluidNC();
+                });
+
+                document.getElementById('restart-fluidnc').addEventListener('click', () => {
+                    this.restartFluidNC();
+                });
+
+                document.getElementById('reset-config').addEventListener('click', () => {
+                    this.resetToDefault();
+                });
+
+                document.getElementById('load-file').addEventListener('click', () => {
+                    document.getElementById('config-file').click();
+                });
+
+                document.getElementById('config-file').addEventListener('change', (e) => {
+                    this.loadConfigFromFile(e.target.files[0]);
+                });
+
+                document.getElementById('download-config').addEventListener('click', () => {
+                    this.downloadConfig();
+                });
+
+                document.getElementById('config-content').addEventListener('input', () => {
+                    this.markAsChanged();
+                });
+            }
+
+            checkConnection() {
+                // Check if we have connection from main app
+                const urlParams = new URLSearchParams(window.location.search);
+                const connected = urlParams.get('connected');
+                const type = urlParams.get('type');
+                
+                if (connected === 'true') {
+                    this.isConnected = true;
+                    this.connectionType = type || 'usb';
+                    this.updateConnectionStatus('connected');
+                    this.enableControls();
+                }
+            }
+
+            async loadConfigFromFluidNC() {
+                if (!this.isConnected) {
+                    this.showStatus('Not connected to FluidNC', 'error');
+                    return;
+                }
+
+                try {
+                    this.showStatus('Loading configuration from FluidNC...', 'info');
+                    
+                    // Request config dump
+                    let response;
+                    if (this.connectionType === 'usb') {
+                        response = await this.serialComm.sendCommand('$CD');
+                    } else {
+                        response = await this.websocketComm.sendCommand('$CD');
+                    }
+
+                    if (response) {
+                        document.getElementById('config-content').value = response;
+                        this.showStatus('Configuration loaded successfully', 'success');
+                        this.enableSaveControls();
+                    }
+                } catch (error) {
+                    this.showStatus(`Failed to load configuration: ${error.message}`, 'error');
+                }
+            }
+
+            async saveConfigToFluidNC() {
+                if (!this.isConnected) {
+                    this.showStatus('Not connected to FluidNC', 'error');
+                    return;
+                }
+
+                const config = document.getElementById('config-content').value;
+                if (!config.trim()) {
+                    this.showStatus('No configuration to save', 'error');
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to save this configuration to FluidNC? This will overwrite the current settings.')) {
+                    return;
+                }
+
+                try {
+                    this.showStatus('Saving configuration to FluidNC...', 'info');
+                    
+                    // Save config (this might need to be broken into chunks)
+                    let response;
+                    if (this.connectionType === 'usb') {
+                        response = await this.serialComm.sendCommand(`$Config/Yaml=${config}`);
+                    } else {
+                        response = await this.websocketComm.sendCommand(`$Config/Yaml=${config}`);
+                    }
+
+                    this.showStatus('Configuration saved successfully. Restart FluidNC to apply changes.', 'success');
+                    this.hasChanges = false;
+                } catch (error) {
+                    this.showStatus(`Failed to save configuration: ${error.message}`, 'error');
+                }
+            }
+
+            async restartFluidNC() {
+                if (!this.isConnected) {
+                    this.showStatus('Not connected to FluidNC', 'error');
+                    return;
+                }
+
+                if (!confirm('This will restart FluidNC and disconnect the current session. Continue?')) {
+                    return;
+                }
+
+                try {
+                    this.showStatus('Restarting FluidNC...', 'info');
+                    
+                    if (this.connectionType === 'usb') {
+                        await this.serialComm.sendCommand('$Restart');
+                    } else {
+                        await this.websocketComm.sendCommand('$Restart');
+                    }
+
+                    setTimeout(() => {
+                        this.updateConnectionStatus('disconnected');
+                        this.showStatus('FluidNC restarted. Please reconnect.', 'info');
+                    }, 2000);
+                } catch (error) {
+                    this.showStatus(`Failed to restart FluidNC: ${error.message}`, 'error');
+                }
+            }
+
+            resetToDefault() {
+                if (!confirm('This will reset the editor to default configuration. Unsaved changes will be lost.')) {
+                    return;
+                }
+
+                const defaultConfig = `name: FluidNC WebUI
+board: FluidNC:esp32
+
+stepping:
+  engine: RMT
+  idle_ms: 250
+  pulse_us: 4
+  dir_delay_us: 1
+
+axes:
+  x:
+    steps_per_mm: 250
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 300
+    soft_limits: false
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 200
+      seek_mm_per_min: 800
+      settle_ms: 500
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+
+  y:
+    steps_per_mm: 250
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 300
+    soft_limits: false
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 200
+      seek_mm_per_min: 800
+      settle_ms: 500
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+
+  z:
+    steps_per_mm: 250
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 100
+    max_travel_mm: 200
+    soft_limits: false
+    homing:
+      cycle: 2
+      positive_direction: true
+      mpos_mm: 200
+      feed_mm_per_min: 200
+      seek_mm_per_min: 800
+      settle_ms: 500
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+
+spi:
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+
+probe:
+  pin: gpio.22
+  check_mode_start: true
+
+macros:
+  n0:
+  n1:
+  n2:
+  n3:`;
+
+                document.getElementById('config-content').value = defaultConfig;
+                this.showStatus('Reset to default configuration template', 'info');
+                this.enableSaveControls();
+            }
+
+            loadConfigFromFile(file) {
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('config-content').value = e.target.result;
+                    this.showStatus(`Loaded configuration from ${file.name}`, 'success');
+                    this.enableSaveControls();
+                };
+                reader.readAsText(file);
+            }
+
+            downloadConfig() {
+                const config = document.getElementById('config-content').value;
+                if (!config.trim()) {
+                    this.showStatus('No configuration to download', 'error');
+                    return;
+                }
+
+                const blob = new Blob([config], { type: 'text/yaml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'config.yaml';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                this.showStatus('Configuration downloaded', 'success');
+            }
+
+            markAsChanged() {
+                this.hasChanges = true;
+                this.enableSaveControls();
+            }
+
+            enableControls() {
+                document.getElementById('load-config').disabled = false;
+                document.getElementById('restart-fluidnc').disabled = false;
+            }
+
+            enableSaveControls() {
+                document.getElementById('save-config').disabled = false;
+                document.getElementById('download-config').disabled = false;
+            }
+
+            updateConnectionStatus(status) {
+                const indicator = document.getElementById('connection-indicator');
+                
+                switch (status) {
+                    case 'connected':
+                        indicator.className = 'status-connected';
+                        indicator.innerHTML = '<i class="fas fa-circle"></i> Connected';
+                        this.isConnected = true;
+                        break;
+                    default:
+                        indicator.className = 'status-disconnected';
+                        indicator.innerHTML = '<i class="fas fa-circle"></i> Disconnected';
+                        this.isConnected = false;
+                }
+            }
+
+            showStatus(message, type) {
+                const statusDiv = document.getElementById('config-status');
+                statusDiv.textContent = message;
+                statusDiv.className = `config-status ${type}`;
+                statusDiv.style.display = 'block';
+                
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 5000);
+                }
+            }
+        }
+
+        // Initialize config editor when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.configEditor = new ConfigEditor();
+        });
+    </script>
+</body>
+</html>
