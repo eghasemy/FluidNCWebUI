@@ -835,3 +835,88 @@ body {
         gap: 0.5rem;
     }
 }
+
+/* WebSocket URL Controls */
+.websocket-url-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.websocket-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+#websocket-url-select {
+    width: 100%;
+}
+
+#websocket-url {
+    width: 100%;
+}
+
+#save-websocket-url {
+    border: 2px solid #27ae60;
+    color: #27ae60;
+}
+
+#save-websocket-url:hover {
+    border-color: #219a52;
+    color: #219a52;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+/* File List Items */
+.file-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-bottom: 1px solid #f1f3f4;
+    transition: background-color 0.2s ease;
+}
+
+.file-item:hover {
+    background-color: #f8f9fa;
+}
+
+.file-item.dir i {
+    color: #f39c12;
+}
+
+.file-item.file i {
+    color: #6c757d;
+}
+
+.file-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.file-size {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-family: monospace;
+}
+
+.file-action {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border: 1px solid #dee2e6;
+}
+
+.file-action:hover {
+    border-color: #3498db;
+    color: #3498db;
+}

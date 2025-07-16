@@ -9,6 +9,10 @@ class FluidNCWebUI {
         this.verboseMode = false;
         this.debugMode = false;
         this.autoScroll = true;
+        this.savedWebSocketUrls = this.loadSavedUrls();
+        this.macros = this.loadMacros();
+        this.spindleSpeed = 0;
+        this.spindleEnabled = false;
         
         this.serialComm = new SerialCommunication();
         this.websocketComm = new WebSocketCommunication();
@@ -23,6 +27,10 @@ class FluidNCWebUI {
         this.updateConnectionStatus();
         this.loadProbeParameters();
         this.setupConsole();
+        this.setupFileTabs();
+        this.setupMacros();
+        this.setupSpindleControls();
+        this.populateWebSocketUrlDropdown();
     }
 
     setupEventListeners() {
@@ -234,6 +242,18 @@ class FluidNCWebUI {
                 const cmd = e.target.dataset.cmd;
                 this.sendOverrideCommand(cmd);
             });
+        });
+
+        // WebSocket URL management
+        document.getElementById('save-websocket-url').addEventListener('click', () => {
+            this.saveWebSocketUrl();
+        });
+
+        document.getElementById('websocket-url-select').addEventListener('change', (e) => {
+            const url = e.target.value;
+            if (url) {
+                document.getElementById('websocket-url').value = url;
+            }
         });
     }
 
@@ -565,9 +585,78 @@ class FluidNCWebUI {
     }
 
     parseFileListResponse(response) {
-        // Handle file listing responses from FluidNC
-        console.log('File list response:', response);
-        // Implementation depends on actual FluidNC file listing format
+        try {
+            // Handle FluidNC file listing responses
+            if (response.includes('[FILE:')) {
+                // Extract file info: [FILE:filename.gcode|SIZE:1234]
+                const match = response.match(/\[FILE:([^|]+)\|SIZE:(\d+)\]/);
+                if (match) {
+                    const filename = match[1];
+                    const size = match[2];
+                    this.addFileToList(filename, size, 'file');
+                }
+            } else if (response.includes('[DIR:')) {
+                // Extract directory info: [DIR:foldername]
+                const match = response.match(/\[DIR:([^\]]+)\]/);
+                if (match) {
+                    const dirname = match[1];
+                    this.addFileToList(dirname, '', 'dir');
+                }
+            }
+            
+            // Debug: log all file-related responses
+            if (this.debugMode) {
+                this.addConsoleMessage(`[DEBUG] File response: ${response}`, 'debug');
+            }
+        } catch (error) {
+            console.error('Error parsing file list response:', error);
+        }
+    }
+
+    addFileToList(name, size, type) {
+        // Determine which file list to update based on current tab
+        const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+        const fileListId = `${activeTab}-file-list`;
+        const fileList = document.getElementById(fileListId);
+        
+        // Create or update file list if it's showing placeholder text
+        if (fileList.querySelector('p')) {
+            fileList.innerHTML = '';
+        }
+
+        const fileItem = document.createElement('div');
+        fileItem.className = `file-item ${type}`;
+        
+        const icon = type === 'dir' ? 'fa-folder' : 'fa-file';
+        const sizeText = size ? ` (${this.formatFileSize(size)})` : '';
+        
+        fileItem.innerHTML = `
+            <i class="fas ${icon}"></i>
+            <span class="file-name">${name}</span>
+            <span class="file-size">${sizeText}</span>
+            <button class="btn btn-sm file-action" onclick="window.fluidNCApp.selectFile('${name}', '${type}')">
+                ${type === 'dir' ? 'Open' : 'Select'}
+            </button>
+        `;
+        
+        fileList.appendChild(fileItem);
+    }
+
+    formatFileSize(bytes) {
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
+    }
+
+    selectFile(filename, type) {
+        if (type === 'dir') {
+            // Navigate into directory (implementation depends on FluidNC's file system structure)
+            this.addConsoleMessage(`Opening directory: ${filename}`, 'info');
+        } else {
+            // Select file for loading
+            this.addConsoleMessage(`Selected file: ${filename}`, 'info');
+            // Could implement file loading from SD/Flash here
+        }
     }
 
     parseMachineStateMessage(response) {
@@ -606,7 +695,8 @@ class FluidNCWebUI {
                 await this.sendCommand('?');
             } else {
                 // For WebSocket, send status request directly without waiting for response
-                await this.websocketComm.sendCommandNoWait('?');
+                // FluidNC responds to simple status query
+                this.websocketComm.socket.send('?');
             }
         } catch (error) {
             console.error('Status request error:', error);
@@ -797,6 +887,80 @@ class FluidNCWebUI {
             pauseBtn.disabled = true;
             pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
         }
+    }
+
+    // WebSocket URL management
+    loadSavedUrls() {
+        const saved = localStorage.getItem('fluidnc-websocket-urls');
+        return saved ? JSON.parse(saved) : [];
+    }
+
+    saveSavedUrls() {
+        localStorage.setItem('fluidnc-websocket-urls', JSON.stringify(this.savedWebSocketUrls));
+    }
+
+    populateWebSocketUrlDropdown() {
+        const select = document.getElementById('websocket-url-select');
+        // Clear existing options except the first one
+        select.innerHTML = '<option value="">Select or enter URL...</option>';
+        
+        this.savedWebSocketUrls.forEach((urlData, index) => {
+            const option = document.createElement('option');
+            option.value = urlData.url;
+            option.textContent = urlData.name || urlData.url;
+            select.appendChild(option);
+        });
+    }
+
+    saveWebSocketUrl() {
+        const url = document.getElementById('websocket-url').value.trim();
+        if (!url) {
+            this.addConsoleMessage('Please enter a WebSocket URL', 'error');
+            return;
+        }
+
+        // Check if URL already exists
+        const exists = this.savedWebSocketUrls.find(item => item.url === url);
+        if (exists) {
+            this.addConsoleMessage('URL already saved', 'info');
+            return;
+        }
+
+        // Prompt for name
+        const name = prompt('Enter a name for this connection:', url);
+        if (name === null) return; // User cancelled
+
+        this.savedWebSocketUrls.push({
+            url: url,
+            name: name || url
+        });
+
+        this.saveSavedUrls();
+        this.populateWebSocketUrlDropdown();
+        this.addConsoleMessage(`WebSocket URL saved: ${name || url}`, 'info');
+    }
+
+    // Macro management
+    loadMacros() {
+        const saved = localStorage.getItem('fluidnc-macros');
+        return saved ? JSON.parse(saved) : {};
+    }
+
+    saveMacros() {
+        localStorage.setItem('fluidnc-macros', JSON.stringify(this.macros));
+    }
+
+    setupMacros() {
+        // Setup macro functionality
+        // Load existing macros from storage
+    }
+
+    setupSpindleControls() {
+        // Setup spindle control functionality
+    }
+
+    setupFileTabs() {
+        // File tab setup is handled in event listeners
     }
 }
 

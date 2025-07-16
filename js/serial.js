@@ -14,7 +14,12 @@ class SerialCommunication {
         try {
             // Check if Web Serial API is supported
             if (!('serial' in navigator)) {
-                throw new Error('Web Serial API not supported in this browser');
+                throw new Error('Web Serial API not supported in this browser. Please use Chrome 89+, Edge 89+, or Opera 75+');
+            }
+
+            // Check if secure context (HTTPS or localhost)
+            if (!window.isSecureContext) {
+                throw new Error('Web Serial API requires a secure context (HTTPS or localhost)');
             }
 
             // Request a port and open it
