@@ -6,6 +6,8 @@ class FluidNCWebUI {
         this.currentPosition = { x: 0, y: 0, z: 0 };
         this.machinePosition = { x: 0, y: 0, z: 0 };
         this.machineState = 'Idle';
+        this.verboseMode = false;
+        this.autoScroll = true;
         
         this.serialComm = new SerialCommunication();
         this.websocketComm = new WebSocketCommunication();
@@ -156,6 +158,77 @@ class FluidNCWebUI {
 
         document.getElementById('apply-rotation').addEventListener('click', () => {
             this.probingManager.applyRotationToGCode();
+        });
+
+        // Status controls
+        document.getElementById('unlock').addEventListener('click', () => {
+            this.sendCommand('$X');
+        });
+
+        document.getElementById('sleep').addEventListener('click', () => {
+            this.sendCommand('$SLP');
+        });
+
+        document.getElementById('pause-resume').addEventListener('click', () => {
+            this.togglePauseResume();
+        });
+
+        // Terminal controls
+        document.getElementById('verbose-mode').addEventListener('change', (e) => {
+            this.verboseMode = e.target.checked;
+        });
+
+        document.getElementById('autoscroll').addEventListener('change', (e) => {
+            this.autoScroll = e.target.checked;
+        });
+
+        document.getElementById('clear-console').addEventListener('click', () => {
+            this.clearConsole();
+        });
+
+        // File tabs
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchFileTab(e.target.dataset.tab);
+            });
+        });
+
+        // Macro controls
+        document.querySelectorAll('.macro-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const macroNum = e.target.dataset.macro;
+                this.runMacro(macroNum);
+            });
+        });
+
+        document.getElementById('save-macro').addEventListener('click', () => {
+            this.saveMacro();
+        });
+
+        // Spindle controls
+        document.getElementById('set-spindle-speed').addEventListener('click', () => {
+            const speed = document.getElementById('spindle-speed').value;
+            this.sendCommand(`S${speed}`);
+        });
+
+        document.getElementById('spindle-on-cw').addEventListener('click', () => {
+            this.sendCommand('M3');
+        });
+
+        document.getElementById('spindle-on-ccw').addEventListener('click', () => {
+            this.sendCommand('M4');
+        });
+
+        document.getElementById('spindle-off').addEventListener('click', () => {
+            this.sendCommand('M5');
+        });
+
+        // Override controls
+        document.querySelectorAll('.override-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const cmd = e.target.dataset.cmd;
+                this.sendOverrideCommand(cmd);
+            });
         });
     }
 
@@ -320,7 +393,7 @@ class FluidNCWebUI {
             if (this.connectionType === 'usb') {
                 this.serialComm.sendRaw(new Uint8Array([0x18]));
             } else {
-                this.websocketComm.sendRaw('\\x18');
+                this.websocketComm.sendRaw('\x18');
             }
             this.addConsoleMessage('EMERGENCY STOP SENT', 'error');
         }
@@ -335,7 +408,7 @@ class FluidNCWebUI {
                     this.serialComm.sendCommand('$X');
                 }, 100);
             } else {
-                this.websocketComm.sendRaw('\\x18');
+                this.websocketComm.sendRaw('\x18');
                 setTimeout(() => {
                     this.websocketComm.sendCommand('$X');
                 }, 100);
@@ -359,7 +432,8 @@ class FluidNCWebUI {
         if (response.startsWith('<') && response.endsWith('>')) {
             const statusMatch = response.match(/<([^|]+)\|([^>]+)>/);
             if (statusMatch) {
-                this.machineState = statusMatch[1];
+                const state = statusMatch[1];
+                this.updateMachineState(state);
                 
                 // Parse position data
                 const posData = statusMatch[2];
@@ -422,7 +496,10 @@ class FluidNCWebUI {
         messageDiv.innerHTML = `[${timestamp}] ${message}`;
         
         this.consoleOutput.appendChild(messageDiv);
-        this.consoleOutput.scrollTop = this.consoleOutput.scrollHeight;
+        
+        if (this.autoScroll) {
+            this.consoleOutput.scrollTop = this.consoleOutput.scrollHeight;
+        }
         
         // Limit console history to 1000 messages
         const messages = this.consoleOutput.children;
@@ -473,6 +550,95 @@ class FluidNCWebUI {
 
     async executeCommand(command) {
         return await this.sendCommand(command);
+    }
+
+    // New methods for enhanced functionality
+    togglePauseResume() {
+        const btn = document.getElementById('pause-resume');
+        if (btn.textContent.includes('Pause')) {
+            this.sendCommand('!'); // Feed hold
+            btn.innerHTML = '<i class="fas fa-play"></i> Resume';
+        } else {
+            this.sendCommand('~'); // Resume
+            btn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+        }
+    }
+
+    clearConsole() {
+        this.consoleOutput.innerHTML = '';
+    }
+
+    switchFileTab(tab) {
+        // Remove active class from all tabs and contents
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        // Add active class to selected tab and content
+        document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+        document.getElementById(`${tab}-files`).classList.add('active');
+        
+        // Load files for SD/Flash tabs
+        if (tab === 'sd') {
+            this.loadSDFiles();
+        } else if (tab === 'flash') {
+            this.loadFlashFiles();
+        }
+    }
+
+    loadSDFiles() {
+        this.sendCommand('$FM/STA').then(response => {
+            // Parse SD card file list
+            const fileList = document.getElementById('sd-file-list');
+            fileList.innerHTML = '<p>Loading SD card files...</p>';
+        });
+    }
+
+    loadFlashFiles() {
+        this.sendCommand('$FM/Localfs').then(response => {
+            // Parse flash file list
+            const fileList = document.getElementById('flash-file-list');
+            fileList.innerHTML = '<p>Loading flash files...</p>';
+        });
+    }
+
+    runMacro(macroNum) {
+        this.sendCommand(`$${macroNum}`);
+    }
+
+    saveMacro() {
+        const content = document.getElementById('macro-content').value;
+        // Implementation for saving macros would depend on FluidNC's macro system
+        this.addConsoleMessage(`Macro content: ${content}`, 'info');
+    }
+
+    sendOverrideCommand(cmd) {
+        // Convert hex string to appropriate command
+        const hexValue = parseInt(cmd, 16);
+        if (this.connectionType === 'usb') {
+            this.serialComm.sendRaw(new Uint8Array([hexValue]));
+        } else {
+            this.websocketComm.sendRaw(String.fromCharCode(hexValue));
+        }
+    }
+
+    updateMachineState(state) {
+        this.machineState = state;
+        const stateElement = document.getElementById('machine-state');
+        stateElement.textContent = state;
+        stateElement.className = `state-${state.toLowerCase()}`;
+        
+        // Update pause/resume button based on state
+        const pauseBtn = document.getElementById('pause-resume');
+        if (state === 'Run') {
+            pauseBtn.disabled = false;
+            pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+        } else if (state === 'Hold') {
+            pauseBtn.disabled = false;
+            pauseBtn.innerHTML = '<i class="fas fa-play"></i> Resume';
+        } else {
+            pauseBtn.disabled = true;
+            pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+        }
     }
 }
 

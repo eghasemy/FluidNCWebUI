@@ -92,73 +92,39 @@ class WebSocketCommunication {
 
     handleMessage(data) {
         try {
-            // Try to parse as JSON first (for structured messages)
-            let message;
-            try {
-                message = JSON.parse(data);
-                this.handleStructuredMessage(message);
-            } catch {
-                // If not JSON, treat as plain text response
-                this.handleTextMessage(data);
-            }
+            // Handle plain text messages (FluidNC sends simple text responses)
+            const lines = data.split('\n');
+            
+            lines.forEach(line => {
+                line = line.trim();
+                if (line) {
+                    // Log the response
+                    if (window.fluidNCApp) {
+                        // Don't log status reports to reduce console clutter unless in verbose mode
+                        if (!line.startsWith('<') || !line.endsWith('>') || window.fluidNCApp.verboseMode) {
+                            window.fluidNCApp.addConsoleMessage(line, 'received');
+                        }
+                        
+                        // Parse the response
+                        window.fluidNCApp.parseResponse(line);
+                    }
+                }
+            });
         } catch (error) {
             console.error('Message handling error:', error);
         }
     }
 
-    handleStructuredMessage(message) {
-        // Handle structured JSON messages
-        if (message.type === 'response' && message.commandId !== undefined) {
-            // Handle command response
-            const resolver = this.pendingCommands.get(message.commandId);
-            if (resolver) {
-                resolver(message.data);
-                this.pendingCommands.delete(message.commandId);
-            }
-        } else if (message.type === 'status') {
-            // Handle status updates
-            if (window.fluidNCApp) {
-                window.fluidNCApp.parseResponse(message.data);
-            }
-        } else if (message.type === 'notification') {
-            // Handle notifications
-            if (window.fluidNCApp) {
-                window.fluidNCApp.addConsoleMessage(message.data, 'info');
+    // Send ping to keep connection alive
+    ping() {
+        if (this.isConnected && this.socket) {
+            try {
+                // Send simple status query as ping
+                this.socket.send('?');
+            } catch (error) {
+                console.error('Ping error:', error);
             }
         }
-    }
-
-    handleTextMessage(data) {
-        // Handle plain text messages (like direct GRBL responses)
-        const lines = data.split('\n');
-        
-        lines.forEach(line => {
-            line = line.trim();
-            if (line) {
-                // Log the response
-                if (window.fluidNCApp) {
-                    // Don't log status reports to reduce console clutter
-                    if (!line.startsWith('<') || !line.endsWith('>')) {
-                        window.fluidNCApp.addConsoleMessage(line, 'received');
-                    }
-                    
-                    // Parse the response
-                    window.fluidNCApp.parseResponse(line);
-                }
-                
-                // Handle command responses
-                if (line === 'ok' || line.startsWith('error:')) {
-                    const commandId = Array.from(this.pendingCommands.keys())[0];
-                    if (commandId !== undefined) {
-                        const resolver = this.pendingCommands.get(commandId);
-                        if (resolver) {
-                            resolver(line);
-                            this.pendingCommands.delete(commandId);
-                        }
-                    }
-                }
-            }
-        });
     }
 
     async sendCommand(command) {
@@ -167,36 +133,23 @@ class WebSocketCommunication {
         }
 
         try {
-            const cmdId = this.commandId++;
+            // Send plain text command directly (FluidNC expects simple text commands)
+            this.socket.send(command + '\n');
             
-            // Create a promise that will be resolved when we get a response
-            const responsePromise = new Promise((resolve) => {
-                this.pendingCommands.set(cmdId, resolve);
-            });
-
-            // Send the command - try structured format first
-            const message = {
-                type: 'command',
-                commandId: cmdId,
-                data: command
-            };
-
-            try {
-                this.socket.send(JSON.stringify(message));
-            } catch {
-                // Fallback to plain text if structured format fails
-                this.socket.send(command);
+            // Log the sent command
+            if (window.fluidNCApp) {
+                window.fluidNCApp.addConsoleMessage(`> ${command}`, 'sent');
             }
 
-            // Wait for response with timeout
-            const response = await Promise.race([
-                responsePromise,
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Command timeout')), 5000)
-                )
-            ]);
+            // For non-query commands, return immediately
+            if (command !== '?' && !command.startsWith('$')) {
+                return 'ok';
+            }
 
-            return response;
+            // For status queries and settings, wait briefly for response
+            return new Promise((resolve) => {
+                setTimeout(() => resolve('ok'), 100);
+            });
         } catch (error) {
             console.error('Send command error:', error);
             throw error;
@@ -209,18 +162,8 @@ class WebSocketCommunication {
         }
 
         try {
-            // Send raw data - for special commands like emergency stop
-            const message = {
-                type: 'raw',
-                data: data
-            };
-
-            try {
-                this.socket.send(JSON.stringify(message));
-            } catch {
-                // Fallback to plain text
-                this.socket.send(data);
-            }
+            // Send raw data directly as text
+            this.socket.send(data);
         } catch (error) {
             console.error('Send raw data error:', error);
             throw error;
@@ -234,16 +177,8 @@ class WebSocketCommunication {
         }
 
         try {
-            const message = {
-                type: 'command',
-                data: command
-            };
-
-            try {
-                this.socket.send(JSON.stringify(message));
-            } catch {
-                this.socket.send(command);
-            }
+            // Send plain text command directly
+            this.socket.send(command + '\n');
             
             // Log the sent command
             if (window.fluidNCApp) {
@@ -302,11 +237,8 @@ class WebSocketCommunication {
     ping() {
         if (this.isConnected && this.socket) {
             try {
-                const pingMessage = {
-                    type: 'ping',
-                    timestamp: Date.now()
-                };
-                this.socket.send(JSON.stringify(pingMessage));
+                // Send simple status query as ping
+                this.socket.send('?');
             } catch (error) {
                 console.error('Ping error:', error);
             }
